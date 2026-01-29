@@ -1,0 +1,6 @@
+streamlit
+tensorflow-cpu
+Pillow
+numpy
+PyGithub
+protobuf<4.0.0
