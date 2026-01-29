@@ -7,6 +7,9 @@ import json
 import os
 from github import Github
 import io
+import h5py
+import tempfile
+import shutil
 
 # Page configuration
 st.set_page_config(
@@ -15,11 +18,80 @@ st.set_page_config(
     layout="centered"
 )
 
+# Fix the model file by removing 'groups' parameter
+def fix_model_file(input_path, output_path):
+    """Remove the 'groups' parameter from DepthwiseConv2D layers"""
+    try:
+        # Read the model config
+        with h5py.File(input_path, 'r') as f:
+            config_str = f.attrs['model_config']
+            if isinstance(config_str, bytes):
+                config_str = config_str.decode('utf-8')
+            config = json.loads(config_str)
+        
+        # Remove 'groups' from all DepthwiseConv2D layers
+        def remove_groups(obj):
+            if isinstance(obj, dict):
+                if obj.get('class_name') == 'DepthwiseConv2D':
+                    if 'config' in obj and 'groups' in obj['config']:
+                        del obj['config']['groups']
+                for value in obj.values():
+                    remove_groups(value)
+            elif isinstance(obj, list):
+                for item in obj:
+                    remove_groups(item)
+        
+        remove_groups(config)
+        
+        # Copy file and update config
+        shutil.copy2(input_path, output_path)
+        with h5py.File(output_path, 'r+') as f:
+            f.attrs['model_config'] = json.dumps(config)
+        
+        return True
+    except Exception as e:
+        st.error(f"Error fixing model: {e}")
+        return False
+
 # Load the model
 @st.cache_resource
 def load_model():
-    model = tf.keras.models.load_model('keras_model.h5', compile=False)
-    return model
+    model_path = 'keras_model.h5'
+    fixed_model_path = 'keras_model_fixed.h5'
+    
+    # Check if we already have a fixed version
+    if os.path.exists(fixed_model_path):
+        try:
+            model = tf.keras.models.load_model(fixed_model_path, compile=False)
+            return model
+        except:
+            pass
+    
+    # Try loading original model first
+    try:
+        model = tf.keras.models.load_model(model_path, compile=False)
+        return model
+    except Exception as e:
+        error_msg = str(e)
+        
+        # If it's the 'groups' parameter error, fix the model
+        if 'groups' in error_msg and 'DepthwiseConv2D' in error_msg:
+            st.info("🔧 Fixing model compatibility issue... (this happens once)")
+            
+            if fix_model_file(model_path, fixed_model_path):
+                try:
+                    model = tf.keras.models.load_model(fixed_model_path, compile=False)
+                    st.success("✅ Model fixed and loaded successfully!")
+                    return model
+                except Exception as e2:
+                    st.error(f"Error loading fixed model: {e2}")
+                    return None
+            else:
+                st.error("Could not fix model automatically")
+                return None
+        else:
+            st.error(f"Error loading model: {e}")
+            return None
 
 # Load labels
 @st.cache_data
@@ -122,10 +194,15 @@ def main():
     try:
         model = load_model()
         labels = load_labels()
+        
+        if model is None:
+            st.error("⚠️ Could not load the model. Please check the errors above.")
+            st.stop()
+            
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
         st.info("Make sure 'keras_model.h5' and 'labels.txt' are in the same directory as this app.")
-        return
+        st.stop()
     
     # File uploader
     uploaded_file = st.file_uploader(
