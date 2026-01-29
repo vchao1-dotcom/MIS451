@@ -15,29 +15,11 @@ st.set_page_config(
     layout="centered"
 )
 
-# Custom DepthwiseConv2D that ignores 'groups' parameter
-class CustomDepthwiseConv2D(tf.keras.layers.DepthwiseConv2D):
-    def __init__(self, **kwargs):
-        # Remove 'groups' parameter if present
-        kwargs.pop('groups', None)
-        super().__init__(**kwargs)
-
 # Load the model
 @st.cache_resource
 def load_model():
-    try:
-        # Load model with custom object to handle 'groups' parameter
-        custom_objects = {'DepthwiseConv2D': CustomDepthwiseConv2D}
-        model = tf.keras.models.load_model(
-            'keras_model.h5', 
-            custom_objects=custom_objects,
-            compile=False
-        )
-        return model
-    except Exception as e:
-        st.error(f"Error loading model: {str(e)}")
-        st.info("Model loading failed. Please contact support or re-export from Teachable Machine.")
-        return None
+    model = tf.keras.models.load_model('keras_model.h5', compile=False)
+    return model
 
 # Load labels
 @st.cache_data
@@ -140,15 +122,8 @@ def main():
     try:
         model = load_model()
         labels = load_labels()
-        
-        # Check if model loaded successfully
-        if model is None:
-            st.error("⚠️ Model failed to load. Please check the error message above.")
-            st.info("💡 Try re-exporting your model from Teachable Machine or use the fix_model.py script.")
-            return
-            
     except Exception as e:
-        st.error(f"Error loading model or labels: {str(e)}")
+        st.error(f"Error loading model: {str(e)}")
         st.info("Make sure 'keras_model.h5' and 'labels.txt' are in the same directory as this app.")
         return
     
