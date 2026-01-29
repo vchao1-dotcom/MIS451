@@ -1,7 +1,7 @@
 streamlit
-tensorflow-cpu==2.15.1
+tensorflow-cpu
 Pillow
-numpy<2.0.0
+numpy
 PyGithub
-h5py==3.10.0
-protobuf==3.20.3
+h5py
+protobuf
